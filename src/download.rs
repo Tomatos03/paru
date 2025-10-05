@@ -297,16 +297,28 @@ async fn aur_pkgbuilds(config: &Config, bases: &Bases) -> Result<()> {
         })?;
     } else {
         let total = download.len().to_string();
+        // let template = format!(
+        //     " ({{pos:>{}}}/{{len}}) {{prefix:45!}} [{{wide_bar}}]",
+        //     total.len()
+        // );
         let template = format!(
-            " ({{pos:>{}}}/{{len}}) {{prefix:45!}} [{{wide_bar}}]",
+            " ({{pos:>{}}}/{{len}}) {{prefix:45!}} {{custom_bar}}",
             total.len()
         );
         let pb = ProgressBar::new(download.len() as u64);
         pb.set_style(
             ProgressStyle::default_bar()
                 .template(&template)?
-                .progress_chars("-> "),
+                .with_key("custom_bar", |state: &indicatif::ProgressState, _writer: &mut dyn std::fmt::Write| {
+                    let progress = state.fraction();
+                    write!(_writer, "{}", custom_bar(progress, 30)).unwrap();
+                })
         );
+        // pb.set_style(
+        //     ProgressStyle::default_bar()
+        //         .template(&template)?
+        //         .progress_chars("-> "),
+        // );
 
         config.fetch.download_cb(&download, |cb| {
             let base = bases
@@ -599,4 +611,40 @@ fn pipe_bat(config: &Config, pkgbuild: &[u8]) -> Result<()> {
     let _ = command.stdin.as_mut().unwrap().write_all(pkgbuild);
     command.wait()?;
     Ok(())
+}
+
+fn custom_bar(progress: f32, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+
+    let filled_width = (progress * width as f32) as usize;
+    let mut result = String::new();
+
+    for i in 0..width {
+        if i == 0 {
+            // 最左边的字符
+            if progress == 0.0 {
+                result.push('\u{EE00}'); // 进度为0时
+            } else {
+                result.push('\u{EE03}'); // 有进度时
+            }
+        } else if i == width - 1 {
+            // 最右边的字符
+            if progress >= 1.0 {
+                result.push('\u{EE05}'); // 100%时
+            } else {
+                result.push('\u{EE02}'); // 未到100%时
+            }
+        } else {
+            // 中间部分
+            if i < filled_width {
+                result.push('\u{EE04}'); // 已填充
+            } else {
+                result.push('\u{EE01}'); // 未填充
+            }
+        }
+    }
+
+    result
 }
